@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f4efe6;
+  --background-deep: #ebe2d3;
+  --surface: rgba(255, 250, 242, 0.78);
+  --surface-strong: rgba(255, 250, 242, 0.94);
+  --surface-dark: #12332d;
+  --surface-muted: #24483f;
+  --foreground: #16231f;
+  --muted: #6e6a5f;
+  --border: rgba(17, 35, 31, 0.12);
+  --accent: #ce6b2c;
+  --accent-soft: #f3b56b;
+  --success: #156b52;
+  --danger: #a63c2f;
+  --shadow: 0 24px 80px rgba(31, 29, 25, 0.14);
+  --font-sans: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", monospace;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(243, 181, 107, 0.34), transparent 30%),
+    radial-gradient(circle at top right, rgba(21, 107, 82, 0.16), transparent 22%),
+    linear-gradient(180deg, var(--background) 0%, var(--background-deep) 100%);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(206, 107, 44, 0.22);
+}
+
+.glass-panel {
+  background: var(--surface);
+  backdrop-filter: blur(18px);
+  box-shadow: var(--shadow);
+}
+
+.label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.metric-card {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 1.25rem;
+}
+
+.animated-rise {
+  animation: rise 420ms ease-out both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
