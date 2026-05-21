@@ -50,8 +50,6 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000)
 
-The development script intentionally defaults to webpack because it has been more reliable than Turbopack for this repo on macOS file watchers.
-
 ## Provider Configuration
 
 - `OPENAI_API_KEY` enables OpenAI requests
@@ -141,4 +139,4 @@ Both commands pass in this repo.
 
 ## Additional Notes
 
-See [ARCHITECTURE_NOTES.md](/Users/aamaan/Documents/New%20project%203/ARCHITECTURE_NOTES.md), [ARCHITECTURE_AND_IMPLEMENTATION_PLAN.md](/Users/aamaan/Documents/New%20project%203/ARCHITECTURE_AND_IMPLEMENTATION_PLAN.md), and [k8s/README.md](/Users/aamaan/Documents/New%20project%203/k8s/README.md).
+See [ARCHITECTURE_NOTES.md](./ARCHITECTURE_NOTES.md), [ARCHITECTURE_AND_IMPLEMENTATION_PLAN.md](./ARCHITECTURE_AND_IMPLEMENTATION_PLAN.md), and [k8s/README.md](./k8s/README.md).
