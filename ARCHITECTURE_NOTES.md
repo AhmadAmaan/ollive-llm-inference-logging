@@ -30,6 +30,13 @@ This choice adds two useful properties without introducing Kafka or another exte
 
 The tradeoff is that event durability and operational analytics currently share the same PostgreSQL instance.
 
+## Logging Strategy
+
+- Every provider call passes through one instrumentation boundary in the LLM wrapper.
+- The wrapper captures normalized metadata including provider, model, timestamps, latency, token usage, request status, conversation identifiers, and input/output previews.
+- Normalized events are sent to the ingestion endpoint in near real time, stored first in `inference_events`, and then materialized into query-friendly rows in `inference_logs`.
+- Full chat content remains in `messages`, while inference logs store redacted previews so operational debugging remains useful without duplicating raw sensitive content in telemetry records.
+
 ## Streaming Transport
 
 The UI uses NDJSON over a regular HTTP response instead of SSE-specific abstractions or WebSockets.
