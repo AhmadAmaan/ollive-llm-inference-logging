@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { enqueueInferenceEvent } from "@/lib/server/ingestion";
+import { enqueueInferenceEvent } from "@/lib/ingestion/core";
 import { inferenceEventSchema } from "@/lib/validators";
 
 export const runtime = "nodejs";

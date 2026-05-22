@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getRuntimeInfo } from "@/lib/server/runtime-info";
+import { getRuntimeInfo } from "@/lib/ui-app/runtime-info";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

@@ -9,11 +9,11 @@ import {
   getIngestionQueueConcurrency,
   getIngestionQueueName,
   getIngestionReconciliationIntervalMs,
-} from "@/lib/server/ingestion-queue";
+} from "@/lib/ingestion/queue";
 import {
   processInferenceEventById,
   processPendingInferenceEvents,
-} from "@/lib/server/ingestion";
+} from "@/lib/ingestion/core";
 
 let reconciliationTimer: NodeJS.Timeout | null = null;
 

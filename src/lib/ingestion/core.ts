@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { query, queryOne, withTransaction } from "@/lib/db";
-import { enqueueInferenceJob } from "@/lib/server/ingestion-queue";
+import { enqueueInferenceJob } from "@/lib/ingestion/queue";
 import type { InferenceEventInput } from "@/lib/validators";
 
 const PROCESSING_STALE_AFTER_MS = 5 * 60 * 1000;

@@ -120,7 +120,7 @@ const result = await sdk.wrap({
 
 ## Interview Feedback Addressed
 
-- The UI app, SDK, and ingestion pipeline are now cleanly separated. The chat UI is only one consumer of the SDK; inference instrumentation lives under `src/lib/sdk`, while ingestion persistence and worker logic live under `src/lib/server` and `src/worker`.
+- The UI app, SDK, and ingestion pipeline are now cleanly separated. The chat UI is only one consumer of the SDK; inference instrumentation lives under `src/lib/sdk`, while ingestion persistence and queue logic live under `src/lib/ingestion` and worker execution lives under `src/worker`.
 - The SDK is wrapper-first and app-agnostic. A consuming app can call `createInferenceSdk(...).wrap(...)` around any inference function instead of depending on chat-specific code paths.
 - Monkey-patching now exists at two levels: `instrumentFetch(...)` provides provider-agnostic HTTP interception, while `instrumentOpenAIClient(...)` and `instrumentAnthropicClient(...)` patch common provider SDK client surfaces directly.
 - Redaction is no longer only regex-based. The pipeline first classifies content into high-risk domains, then applies confidence-based document suppression, structured field redaction, and finally pattern/entity masking.

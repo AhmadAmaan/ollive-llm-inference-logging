@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getMetricsOverview } from "@/lib/server/metrics";
+import { getMetricsOverview } from "@/lib/ui-app/metrics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

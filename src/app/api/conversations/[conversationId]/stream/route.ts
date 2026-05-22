@@ -8,12 +8,12 @@ import {
   getContextMessages,
   getConversationMessages,
   getConversationSummary,
-} from "@/lib/server/conversations";
-import { clearGeneration, registerGeneration } from "@/lib/server/generation-state";
+} from "@/lib/ui-app/conversations";
+import { clearGeneration, registerGeneration } from "@/lib/ui-app/generation-state";
 import {
   InferenceExecutionError,
   streamInstrumentedInference,
-} from "@/lib/server/llm";
+} from "@/lib/ui-app/llm";
 import { sendMessageSchema } from "@/lib/validators";
 
 export const runtime = "nodejs";

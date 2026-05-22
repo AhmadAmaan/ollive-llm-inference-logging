@@ -4,8 +4,8 @@ import {
   cancelPendingConversationRun,
   getConversationMessages,
   getConversationSummary,
-} from "@/lib/server/conversations";
-import { cancelGeneration, clearGeneration } from "@/lib/server/generation-state";
+} from "@/lib/ui-app/conversations";
+import { cancelGeneration, clearGeneration } from "@/lib/ui-app/generation-state";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { createConversation, listConversations } from "@/lib/server/conversations";
+import { createConversation, listConversations } from "@/lib/ui-app/conversations";
 import { createConversationSchema } from "@/lib/validators";
 
 export const runtime = "nodejs";
