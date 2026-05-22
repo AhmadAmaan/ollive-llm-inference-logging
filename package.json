@@ -10,15 +10,19 @@
     "dev:turbo": "next dev",
     "build": "next build",
     "start": "next start",
+    "worker": "tsx src/worker/ingestion-worker.ts",
     "lint": "eslint"
   },
   "dependencies": {
+    "bullmq": "^5.77.0",
     "clsx": "^2.1.1",
+    "ioredis": "^5.10.1",
     "lucide-react": "^1.16.0",
     "next": "16.2.6",
     "pg": "^8.21.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "tsx": "^4.22.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {

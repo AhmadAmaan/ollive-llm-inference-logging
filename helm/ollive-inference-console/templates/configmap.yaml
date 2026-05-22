@@ -9,6 +9,11 @@ data:
   DATABASE_PORT: {{ .Values.postgres.service.port | quote }}
   DATABASE_NAME: {{ .Values.postgres.auth.database | quote }}
   DATABASE_USER: {{ .Values.postgres.auth.username | quote }}
+  REDIS_URL: {{ include "ollive-inference-console.redisUrl" . | quote }}
   DEFAULT_PROVIDER: {{ .Values.runtime.defaultProvider | quote }}
   LLM_MODEL: {{ .Values.runtime.llmModel | quote }}
   ANTHROPIC_MODEL: {{ .Values.runtime.anthropicModel | quote }}
+  INGESTION_QUEUE_NAME: {{ .Values.runtime.ingestionQueueName | quote }}
+  INGESTION_QUEUE_CONCURRENCY: {{ .Values.runtime.ingestionQueueConcurrency | quote }}
+  INGESTION_MAX_RETRIES: {{ .Values.runtime.ingestionMaxRetries | quote }}
+  INGESTION_RECONCILIATION_INTERVAL_MS: {{ .Values.runtime.ingestionReconciliationIntervalMs | quote }}

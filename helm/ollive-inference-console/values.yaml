@@ -8,6 +8,9 @@ image:
 
 replicaCount: 1
 
+worker:
+  replicaCount: 1
+
 service:
   type: ClusterIP
   port: 80
@@ -25,9 +28,14 @@ runtime:
   defaultProvider: auto
   llmModel: gpt-4.1-mini
   anthropicModel: claude-3-5-sonnet-latest
+  ingestionQueueName: inference-events
+  ingestionQueueConcurrency: "4"
+  ingestionMaxRetries: "5"
+  ingestionReconciliationIntervalMs: "15000"
 
 secrets:
   databaseUrl: postgresql://postgres:postgres@{{POSTGRES_HOST}}:5432/ollive_inference
+  redisUrl: redis://{{REDIS_HOST}}:6379
   openaiApiKey: ""
   anthropicApiKey: ""
   postgresPassword: postgres
@@ -59,6 +67,15 @@ postgres:
     size: 10Gi
     accessModes:
       - ReadWriteOnce
+
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: "7-alpine"
+    pullPolicy: IfNotPresent
+  service:
+    port: 6379
 
 podAnnotations: {}
 nodeSelector: {}

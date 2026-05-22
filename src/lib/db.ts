@@ -52,6 +52,15 @@ const schemaSql = `
     created_at TIMESTAMPTZ NOT NULL
   );
 
+  ALTER TABLE inference_logs
+    ADD COLUMN IF NOT EXISTS operation TEXT;
+  ALTER TABLE inference_logs
+    ADD COLUMN IF NOT EXISTS source_type TEXT;
+  ALTER TABLE inference_logs
+    ADD COLUMN IF NOT EXISTS session_id TEXT;
+  ALTER TABLE inference_logs
+    ALTER COLUMN conversation_id DROP NOT NULL;
+
   CREATE INDEX IF NOT EXISTS idx_inference_logs_conversation_created
     ON inference_logs (conversation_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_inference_logs_provider_model
@@ -77,14 +86,6 @@ const schemaSql = `
   CREATE INDEX IF NOT EXISTS idx_inference_events_status_created
     ON inference_events (status, created_at);
 
-  ALTER TABLE inference_logs
-    ADD COLUMN IF NOT EXISTS operation TEXT;
-  ALTER TABLE inference_logs
-    ADD COLUMN IF NOT EXISTS source_type TEXT;
-  ALTER TABLE inference_logs
-    ADD COLUMN IF NOT EXISTS session_id TEXT;
-  ALTER TABLE inference_logs
-    ALTER COLUMN conversation_id DROP NOT NULL;
   ALTER TABLE inference_events
     ADD COLUMN IF NOT EXISTS attempt_count INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE inference_events
@@ -160,4 +161,10 @@ export async function withTransaction<T>(
   } finally {
     client.release();
   }
+}
+
+export async function closePool() {
+  await pool.end();
+  globalForDb.__ollivePool = undefined;
+  globalForDb.__olliveSchemaReady = undefined;
 }

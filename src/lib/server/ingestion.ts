@@ -1,15 +1,11 @@
 import { randomUUID } from "node:crypto";
 
 import { query, queryOne, withTransaction } from "@/lib/db";
+import { enqueueInferenceJob } from "@/lib/server/ingestion-queue";
 import type { InferenceEventInput } from "@/lib/validators";
 
 const PROCESSING_STALE_AFTER_MS = 5 * 60 * 1000;
 const DEFAULT_BATCH_SIZE = 25;
-
-const globalIngestionState = globalThis as typeof globalThis & {
-  __olliveIngestionWorkerScheduled?: boolean;
-  __olliveIngestionWorkerRunning?: boolean;
-};
 
 type ClaimedEventRow = {
   id: string;
@@ -126,10 +122,20 @@ export async function enqueueInferenceEvent(event: InferenceEventInput) {
   );
 
   if (inserted?.id) {
+    let queuePublished = false;
+
+    try {
+      const queueResult = await enqueueInferenceJob(inserted.event_id);
+      queuePublished = queueResult.queued || queueResult.duplicate;
+    } catch (error) {
+      console.error("Inference event persisted but queue publication failed.", error);
+    }
+
     return {
       id: inserted.id,
       eventId: inserted.event_id,
       enqueued: true,
+      queuePublished,
     };
   }
 
@@ -138,11 +144,48 @@ export async function enqueueInferenceEvent(event: InferenceEventInput) {
     [event.eventId],
   );
 
+  let queuePublished = false;
+  if (existing?.event_id) {
+    try {
+      const queueResult = await enqueueInferenceJob(existing.event_id);
+      queuePublished = queueResult.queued || queueResult.duplicate;
+    } catch (error) {
+      console.error("Inference event already existed but queue publication failed.", error);
+    }
+  }
+
   return {
     id: existing?.id ?? null,
     eventId: existing?.event_id ?? event.eventId,
     enqueued: false,
+    queuePublished,
   };
+}
+
+async function claimInferenceEventById(eventId: string) {
+  const staleBefore = new Date(Date.now() - PROCESSING_STALE_AFTER_MS).toISOString();
+
+  return withTransaction(async (client) => {
+    const result = await client.query<ClaimedEventRow>(
+      `
+        UPDATE inference_events
+        SET
+          status = 'PROCESSING',
+          processing_started_at = $2,
+          attempt_count = COALESCE(attempt_count, 0) + 1,
+          error_message = NULL
+        WHERE event_id = $1
+          AND (
+            status IN ('PENDING', 'FAILED')
+            OR (status = 'PROCESSING' AND processing_started_at < $3)
+          )
+        RETURNING id, payload, attempt_count
+      `,
+      [eventId, new Date().toISOString(), staleBefore],
+    );
+
+    return result.rows[0] ?? null;
+  });
 }
 
 async function claimPendingInferenceEvents(limit = DEFAULT_BATCH_SIZE) {
@@ -222,6 +265,31 @@ async function processClaimedInferenceEvent(eventRow: ClaimedEventRow) {
   }
 }
 
+export async function processInferenceEventById(eventId: string) {
+  const claimed = await claimInferenceEventById(eventId);
+  if (!claimed) {
+    return {
+      claimed: false,
+      processed: false,
+    };
+  }
+
+  try {
+    await upsertInferenceLog(claimed.payload);
+    await markInferenceEventProcessed(claimed.id);
+    return {
+      claimed: true,
+      processed: true,
+    };
+  } catch (error) {
+    await markInferenceEventFailed(
+      claimed.id,
+      error instanceof Error ? error.message : "Unknown event processing failure.",
+    );
+    throw error;
+  }
+}
+
 export async function processPendingInferenceEvents(limit = DEFAULT_BATCH_SIZE) {
   const claimed = await claimPendingInferenceEvents(limit);
   let processed = 0;
@@ -241,39 +309,4 @@ export async function processPendingInferenceEvents(limit = DEFAULT_BATCH_SIZE) 
     processed,
     failed,
   };
-}
-
-async function drainInferenceEventQueue() {
-  if (globalIngestionState.__olliveIngestionWorkerRunning) {
-    return;
-  }
-
-  globalIngestionState.__olliveIngestionWorkerRunning = true;
-
-  try {
-    while (true) {
-      const batch = await processPendingInferenceEvents();
-      if (batch.claimed === 0) {
-        break;
-      }
-    }
-  } finally {
-    globalIngestionState.__olliveIngestionWorkerRunning = false;
-  }
-}
-
-export function scheduleInferenceEventProcessing() {
-  if (globalIngestionState.__olliveIngestionWorkerScheduled) {
-    return;
-  }
-
-  globalIngestionState.__olliveIngestionWorkerScheduled = true;
-
-  setTimeout(() => {
-    globalIngestionState.__olliveIngestionWorkerScheduled = false;
-
-    void drainInferenceEventQueue().catch((error) => {
-      console.error("Background inference event worker failed.", error);
-    });
-  }, 0);
 }

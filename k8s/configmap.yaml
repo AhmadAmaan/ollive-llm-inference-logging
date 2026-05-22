@@ -8,6 +8,11 @@ data:
   DATABASE_PORT: "5432"
   DATABASE_NAME: ollive_inference
   DATABASE_USER: postgres
+  REDIS_URL: redis://ollive-redis:6379
   DEFAULT_PROVIDER: auto
   LLM_MODEL: gpt-4.1-mini
   ANTHROPIC_MODEL: claude-3-5-sonnet-latest
+  INGESTION_QUEUE_NAME: inference-events
+  INGESTION_QUEUE_CONCURRENCY: "4"
+  INGESTION_MAX_RETRIES: "5"
+  INGESTION_RECONCILIATION_INTERVAL_MS: "15000"

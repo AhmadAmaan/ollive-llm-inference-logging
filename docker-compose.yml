@@ -16,6 +16,17 @@ services:
       timeout: 5s
       retries: 20
 
+  redis:
+    image: redis:7-alpine
+    container_name: ollive-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   app:
     build:
       context: .
@@ -23,16 +34,41 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/ollive_inference
+      REDIS_URL: redis://redis:6379
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-gpt-4.1-mini}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-3-5-sonnet-latest}
       DEFAULT_PROVIDER: ${DEFAULT_PROVIDER:-auto}
+      INGESTION_QUEUE_NAME: ${INGESTION_QUEUE_NAME:-inference-events}
+      INGESTION_QUEUE_CONCURRENCY: ${INGESTION_QUEUE_CONCURRENCY:-4}
+      INGESTION_MAX_RETRIES: ${INGESTION_MAX_RETRIES:-5}
+      INGESTION_RECONCILIATION_INTERVAL_MS: ${INGESTION_RECONCILIATION_INTERVAL_MS:-15000}
       PORT: 3000
     ports:
       - "3000:3000"
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["npm", "run", "worker"]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/ollive_inference
+      REDIS_URL: redis://redis:6379
+      INGESTION_QUEUE_NAME: ${INGESTION_QUEUE_NAME:-inference-events}
+      INGESTION_QUEUE_CONCURRENCY: ${INGESTION_QUEUE_CONCURRENCY:-4}
+      INGESTION_MAX_RETRIES: ${INGESTION_MAX_RETRIES:-5}
+      INGESTION_RECONCILIATION_INTERVAL_MS: ${INGESTION_RECONCILIATION_INTERVAL_MS:-15000}
 
 volumes:
   postgres-data:

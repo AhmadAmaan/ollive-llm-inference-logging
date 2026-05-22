@@ -38,7 +38,19 @@ helm upgrade --install ollive ./helm/ollive-inference-console \
   --set secrets.databaseUrl='postgresql://user:password@db-host:5432/ollive_inference'
 ```
 
+## External Redis
+
+If you want to use an external Redis instance for the ingestion queue:
+
+```bash
+helm upgrade --install ollive ./helm/ollive-inference-console \
+  --namespace ollive-assignment \
+  --create-namespace \
+  --set redis.enabled=false \
+  --set secrets.redisUrl='redis://redis-host:6379'
+```
+
 ## Tradeoffs
 
 - The chart defaults to a single application replica because cancellation is still tracked in memory.
-- Postgres is bundled by default for self-hosted completeness, but the chart supports switching to an external database.
+- Postgres and Redis are bundled by default for self-hosted completeness, but the chart supports switching either dependency to an external service.

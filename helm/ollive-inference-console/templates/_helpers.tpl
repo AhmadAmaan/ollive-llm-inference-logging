@@ -27,6 +27,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-postgres" (include "ollive-inference-console.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "ollive-inference-console.redis.fullname" -}}
+{{- printf "%s-redis" (include "ollive-inference-console.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "ollive-inference-console.databaseHost" -}}
 {{- if .Values.postgres.enabled -}}
 {{- include "ollive-inference-console.postgres.fullname" . -}}
@@ -35,10 +39,26 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 {{- end -}}
 
+{{- define "ollive-inference-console.redisHost" -}}
+{{- if .Values.redis.enabled -}}
+{{- include "ollive-inference-console.redis.fullname" . -}}
+{{- else -}}
+{{- required "A redis host must be supplied via secrets.redisUrl when redis.enabled=false" "" -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "ollive-inference-console.databaseUrl" -}}
 {{- if .Values.postgres.enabled -}}
 {{- printf "postgresql://%s:%s@%s:%v/%s" .Values.postgres.auth.username .Values.secrets.postgresPassword (include "ollive-inference-console.postgres.fullname" .) .Values.postgres.service.port .Values.postgres.auth.database -}}
 {{- else -}}
 {{- .Values.secrets.databaseUrl -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "ollive-inference-console.redisUrl" -}}
+{{- if .Values.redis.enabled -}}
+{{- printf "redis://%s:%v" (include "ollive-inference-console.redis.fullname" .) .Values.redis.service.port -}}
+{{- else -}}
+{{- .Values.secrets.redisUrl -}}
 {{- end -}}
 {{- end -}}

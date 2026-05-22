@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollive-worker
+  namespace: ollive-assignment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ollive-worker
+  template:
+    metadata:
+      labels:
+        app: ollive-worker
+    spec:
+      containers:
+        - name: worker
+          image: ollive-assignment:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - npm
+            - run
+            - worker
+          envFrom:
+            - configMapRef:
+                name: ollive-app-config
+            - secretRef:
+                name: ollive-app-secrets
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
