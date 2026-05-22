@@ -5,6 +5,7 @@ import type {
   InferenceContext,
   InferenceErrorPayload,
   InferenceEvent,
+  InferenceSdk,
   RedactionInput,
   RedactionResult,
   WrapInferenceOptions,
@@ -49,7 +50,7 @@ function normalizeError(error: unknown): InferenceErrorPayload {
 export function createInferenceSdk({
   transport,
   redact = createDefaultRedactionPipeline(),
-}: CreateInferenceSdkOptions) {
+}: CreateInferenceSdkOptions): InferenceSdk {
   function buildBaseEvent(
     context: InferenceContext,
     startedAt: Date,

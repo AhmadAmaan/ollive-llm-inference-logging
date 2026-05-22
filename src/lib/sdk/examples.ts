@@ -1,7 +1,9 @@
 import {
   createHttpEventTransport,
   createInferenceSdk,
+  instrumentAnthropicClient,
   instrumentFetch,
+  instrumentOpenAIClient,
 } from "@/lib/sdk";
 
 export async function wrapArbitraryHttpCall(baseUrl: string) {
@@ -61,4 +63,38 @@ export function installProviderAgnosticFetchInstrumentation(baseUrl: string) {
       };
     },
   });
+}
+
+export function installProviderClientInstrumentation(
+  baseUrl: string,
+  clients: {
+    openai?: unknown;
+    anthropic?: unknown;
+  },
+) {
+  const sdk = createInferenceSdk({
+    transport: createHttpEventTransport(`${baseUrl}/api/ingest/inference`),
+  });
+
+  const uninstallers: Array<() => void> = [];
+
+  if (clients.openai) {
+    uninstallers.push(
+      instrumentOpenAIClient(clients.openai as never, sdk, {
+        sessionId: "sdk-provider-example",
+      }),
+    );
+  }
+
+  if (clients.anthropic) {
+    uninstallers.push(
+      instrumentAnthropicClient(clients.anthropic as never, sdk, {
+        sessionId: "sdk-provider-example",
+      }),
+    );
+  }
+
+  return () => {
+    uninstallers.forEach((uninstall) => uninstall());
+  };
 }

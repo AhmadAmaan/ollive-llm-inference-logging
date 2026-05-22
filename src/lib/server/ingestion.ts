@@ -153,7 +153,7 @@ async function claimPendingInferenceEvents(limit = DEFAULT_BATCH_SIZE) {
         WITH next_events AS (
           SELECT id
           FROM inference_events
-          WHERE status = 'PENDING'
+          WHERE status IN ('PENDING', 'FAILED')
              OR (status = 'PROCESSING' AND processing_started_at < $2)
           ORDER BY created_at ASC
           LIMIT $1
@@ -200,7 +200,8 @@ async function markInferenceEventFailed(eventRowId: string, message: string) {
       SET
         status = 'FAILED',
         error_message = $1,
-        processing_started_at = NULL
+        processing_started_at = NULL,
+        processed_at = NULL
       WHERE id = $2
     `,
     [message, eventRowId],

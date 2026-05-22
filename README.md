@@ -8,12 +8,13 @@ Production-minded inference logging and ingestion system for an LLM application.
 - Reusable provider-agnostic SDK primitives under `src/lib/sdk`
 - Explicit wrapper-based instrumentation for arbitrary inference functions
 - Optional monkey-patching via `fetch` instrumentation for low-friction HTTP integrations
+- Provider-SDK monkey-patching hooks for common OpenAI and Anthropic client surfaces
 - Streaming assistant responses over NDJSON
 - Provider routing with `OpenAI`, `Anthropic`, `Mock`, or `Auto`
 - Normalized inference logging with latency, token usage, status, and provider metadata
 - Event-first ingestion with an outbox-style `inference_events` table plus normalized `inference_logs`
 - End-to-end asynchronous ingestion using enqueue-only receipt plus background event processing
-- Policy-based redaction that combines structured field redaction, sensitive-document suppression, and pattern matching
+- Classifier-driven redaction that combines document classification, structured field redaction, and pattern-based entity masking
 - Operational dashboard for throughput, status mix, latency buckets, and provider/model mix
 - Local startup via Docker Compose and self-hosted deployment manifests for Kubernetes
 
@@ -83,6 +84,7 @@ The demo chat application is only one consumer of the SDK. The reusable SDK live
 
 - explicit wrapping through `createInferenceSdk(...).wrap(...)`
 - optional monkey-patching through `instrumentFetch(...)`
+- provider-client monkey-patching through `instrumentOpenAIClient(...)` and `instrumentAnthropicClient(...)`
 
 Example wrapper usage:
 
@@ -124,14 +126,14 @@ const result = await sdk.wrap({
 
 ### Redaction strategy
 
-The system stores full chat content in `messages`, but only redacted previews in inference logs. The SDK redaction pipeline combines structured field redaction, sensitive-document suppression for higher-risk payloads such as health records, and baseline pattern matching for secrets and common identifiers.
+The system stores full chat content in `messages`, but only redacted previews in inference logs. The SDK redaction pipeline first classifies content into high-risk domains such as health, finance, identity, legal, and secrets, then applies confidence-based document suppression, structured field redaction, and pattern/entity masking.
 
 ## Deliberate Tradeoffs
 
 - PostgreSQL is the default store because it is portable, familiar, and realistic for deployment and analytics.
 - Schema bootstrap runs on first database access to reduce local setup friction and keep the repo easy to evaluate.
 - The SDK is designed wrapper-first because explicit instrumentation is more predictable and stable across providers and client versions.
-- Monkey-patching is supported as an optional convenience layer because it lowers adoption friction for existing HTTP-based integrations, but it is intentionally not the primary integration mode.
+- Monkey-patching is supported as an optional convenience layer because it lowers adoption friction for existing HTTP-based integrations and provider clients, but it is intentionally not the primary integration mode.
 - Streaming is implemented over NDJSON because it is simple to reason about in route handlers and easy to parse incrementally in the browser.
 - SDK event emission is asynchronous so inference execution is not blocked on logging persistence.
 - Ingestion uses an outbox-style event table plus an in-process background worker instead of introducing an external queue immediately. That keeps the architecture small while still making the pipeline asynchronous end to end.
@@ -170,6 +172,7 @@ Both commands pass in this repo.
 - Move cancellation state and event processing onto shared infrastructure so the app can scale beyond a single active replica.
 - Replace the in-process background worker with a dedicated queue and worker deployment for stronger durability and cross-instance coordination.
 - Add authentication, tenant boundaries, and stronger policy-driven redaction for production environments.
+- Move from rule-backed classification to dedicated external classification services where domain-specific policy enforcement requires stronger guarantees.
 - Extend dashboarding with percentile latency, provider cost tracking, and alert-oriented operational views.
 
 ## Additional Notes

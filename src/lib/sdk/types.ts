@@ -51,6 +51,22 @@ export type RedactionInput = {
   context: InferenceContext;
 };
 
+export type ClassificationDomain =
+  | "health"
+  | "finance"
+  | "identity"
+  | "legal"
+  | "secrets";
+
+export type ClassificationDecision = "allow" | "redact-fields" | "suppress-document";
+
+export type ContentClassification = {
+  domain: ClassificationDomain;
+  confidence: number;
+  decision: ClassificationDecision;
+  reasons: string[];
+};
+
 export type RedactionResult = {
   requestPreview?: string | null;
   responsePreview?: string | null;
@@ -60,6 +76,11 @@ export type RedactionResult = {
 export type RedactionStrategy = {
   name: string;
   redact: (payload: RedactionInput) => RedactionResult | null;
+};
+
+export type RedactionClassifier = {
+  name: string;
+  classify: (payload: RedactionInput) => ContentClassification[];
 };
 
 export type EmitTransport = (event: InferenceEvent) => Promise<void>;
@@ -81,4 +102,27 @@ export type FetchInstrumentationOptions = {
     response?: Response,
   ) => Partial<InferenceContext>;
   resolveUsage?: (response: Response, responseText: string) => InferenceUsage | undefined;
+};
+
+export type InferenceSdk = {
+  wrap: <TInput, TOutput>(options: WrapInferenceOptions<TInput, TOutput>) => Promise<TOutput>;
+  recordSuccess: (options: {
+    context: InferenceContext;
+    input: unknown;
+    output: unknown;
+    startedAt: Date;
+    completedAt?: Date;
+    usage?: InferenceEvent["usage"];
+    metadata?: Record<string, unknown>;
+  }) => string;
+  recordFailure: (options: {
+    context: InferenceContext;
+    input: unknown;
+    output?: unknown;
+    error: unknown;
+    startedAt: Date;
+    completedAt?: Date;
+    status?: "error" | "cancelled";
+    metadata?: Record<string, unknown>;
+  }) => string;
 };

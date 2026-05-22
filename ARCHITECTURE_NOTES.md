@@ -5,7 +5,7 @@
 1. An application call enters the SDK through an explicit wrapper or optional fetch monkey-patch.
 2. In the demo app, `POST /api/conversations/:id/stream` persists the message pair and opens an NDJSON stream.
 3. The provider execution path streams deltas from OpenAI, Anthropic, or the local fallback provider.
-4. The SDK captures timestamps, latency, token usage, status, provider metadata, and redacted previews independently of the UI.
+4. The SDK captures timestamps, latency, token usage, status, provider metadata, and classifier-driven redacted previews independently of the UI.
 5. On completion or failure, the SDK emits a normalized inference event to `/api/ingest/inference` asynchronously.
 6. The ingestion endpoint validates the payload, enqueues it into `inference_events`, and returns immediately.
 7. A background worker claims pending events and materializes them into `inference_logs`.
@@ -14,7 +14,7 @@
 ## Why The Design Is Split This Way
 
 - The chat route owns product behavior and message state.
-- The SDK owns timing, redaction, event normalization, and optional instrumentation hooks.
+- The SDK owns timing, classification/redaction, event normalization, and optional instrumentation hooks.
 - The provider layer owns provider-specific request and streaming behavior.
 - The ingestion layer owns validation and persistence of telemetry.
 - The database keeps chat records and operational telemetry queryable without coupling one concern to the other.
@@ -34,7 +34,7 @@ The tradeoff is that event durability, background processing, and operational an
 
 ## Logging Strategy
 
-- Every provider call passes through one instrumentation boundary in the SDK, either through explicit wrapping or optional fetch monkey-patching.
+- Every provider call passes through one instrumentation boundary in the SDK, either through explicit wrapping, provider-client monkey-patching, or optional fetch monkey-patching.
 - The wrapper captures normalized metadata including provider, model, timestamps, latency, token usage, request status, conversation identifiers, and input/output previews.
 - Normalized events are sent to the ingestion endpoint in near real time, stored first in `inference_events`, and then materialized asynchronously into query-friendly rows in `inference_logs`.
 - Full chat content remains in `messages`, while inference logs store redacted previews so operational debugging remains useful without duplicating raw sensitive content in telemetry records.
@@ -63,7 +63,7 @@ Current redaction covers common high-signal patterns:
 - likely payment card numbers
 - common API key formats
 
-This is intentionally lightweight but more policy-oriented than regex alone. The current pipeline combines structured field redaction, sensitive-document suppression, and pattern matching. A production system would still layer on tenant-specific rules, stronger classifiers, and policy enforcement.
+This is intentionally lightweight but more classification-oriented than regex alone. The current pipeline classifies content into high-risk domains, uses confidence-based document suppression when necessary, and then layers structured field redaction plus pattern/entity masking. A production system would still layer on tenant-specific policies, stronger external classifiers, and policy enforcement.
 
 ## Scaling Notes
 

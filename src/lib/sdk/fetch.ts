@@ -93,23 +93,28 @@ export function instrumentFetch({
     try {
       const response = await originalFetch(input, init);
       const completedAt = new Date();
+      const resolvedContext = resolveContext?.(input, init, response);
+      const eventContext: InferenceContext = {
+        ...context,
+        ...resolvedContext,
+      };
       const responsePreview = await safeResponsePreview(response);
       const redaction = redact({
         input: previewRequestBody(init?.body),
         output: responsePreview,
-        context,
+        context: eventContext,
       });
 
       emitAsync(emit, {
         eventId: randomUUID(),
-        provider: context.provider,
-        model: context.model,
-        operation: context.operation,
-        sourceType: context.sourceType,
-        sessionId: context.sessionId ?? null,
-        conversationId: context.conversationId ?? null,
-        requestMessageId: context.requestMessageId ?? null,
-        responseMessageId: context.responseMessageId ?? null,
+        provider: eventContext.provider,
+        model: eventContext.model,
+        operation: eventContext.operation,
+        sourceType: eventContext.sourceType,
+        sessionId: eventContext.sessionId ?? null,
+        conversationId: eventContext.conversationId ?? null,
+        requestMessageId: eventContext.requestMessageId ?? null,
+        responseMessageId: eventContext.responseMessageId ?? null,
         status: response.ok ? "success" : "error",
         startedAt: startedAt.toISOString(),
         completedAt: completedAt.toISOString(),
@@ -124,7 +129,7 @@ export function instrumentFetch({
               message: `Instrumented fetch failed with status ${response.status}.`,
             },
         metadata: {
-          ...context.metadata,
+          ...eventContext.metadata,
           ...redaction.metadata,
           status: response.status,
           url,
