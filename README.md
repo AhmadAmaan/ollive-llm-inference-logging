@@ -5,11 +5,14 @@ Production-minded inference logging and ingestion system for an LLM application.
 ## What This Repo Delivers
 
 - Multi-turn chat UI with conversation history, resume flow, and request cancellation
+- Reusable provider-agnostic SDK primitives under `src/lib/sdk`
+- Explicit wrapper-based instrumentation for arbitrary inference functions
+- Optional monkey-patching via `fetch` instrumentation for low-friction HTTP integrations
 - Streaming assistant responses over NDJSON
 - Provider routing with `OpenAI`, `Anthropic`, `Mock`, or `Auto`
 - Normalized inference logging with latency, token usage, status, and provider metadata
 - Event-first ingestion with an outbox-style `inference_events` table plus normalized `inference_logs`
-- Redaction of common sensitive data patterns before log previews are stored
+- Policy-based redaction that combines structured field redaction, sensitive-document suppression, and pattern matching
 - Operational dashboard for throughput, status mix, latency buckets, and provider/model mix
 - Local startup via Docker Compose and self-hosted deployment manifests for Kubernetes
 
@@ -73,16 +76,42 @@ The fallback path is an explicit product decision: it keeps the application usab
 - `GET /api/metrics/dashboard`
 - `GET /api/runtime-info`
 
+## SDK Surface
+
+The demo chat application is only one consumer of the SDK. The reusable SDK lives under `src/lib/sdk` and supports two integration styles:
+
+- explicit wrapping through `createInferenceSdk(...).wrap(...)`
+- optional monkey-patching through `instrumentFetch(...)`
+
+Example wrapper usage:
+
+```ts
+const sdk = createInferenceSdk({
+  transport: createHttpEventTransport("http://localhost:3000/api/ingest/inference"),
+});
+
+const result = await sdk.wrap({
+  context: {
+    provider: "openai",
+    model: "gpt-4.1-mini",
+    operation: "support-ticket-summary",
+    sessionId: "ticket-123",
+  },
+  input: requestPayload,
+  execute: () => openai.responses.create(requestPayload),
+});
+```
+
 ## Architecture Summary
 
 ### Request path
 
-1. The UI creates a user message and assistant placeholder.
-2. The stream route calls the provider wrapper through one instrumentation boundary.
-3. Provider deltas stream back to the UI while the full response is accumulated server-side.
-4. Completion emits a normalized inference event.
+1. An application call enters the SDK through an explicit wrapper or optional fetch monkey-patch.
+2. The SDK captures timing, provider metadata, identifiers, previews, and error state independently of any UI.
+3. The demo chat application uses that same SDK while streaming provider output back to the browser.
+4. The SDK emits a normalized inference event asynchronously.
 5. The ingestion path persists the raw event to `inference_events` and processes it into `inference_logs`.
-6. The assistant message is finalized and the dashboard becomes queryable immediately.
+6. The application flow completes without blocking on telemetry persistence.
 
 ### Storage model
 
@@ -93,13 +122,16 @@ The fallback path is an explicit product decision: it keeps the application usab
 
 ### Redaction strategy
 
-The system stores full chat content in `messages`, but only redacted previews in inference logs. That preserves product functionality while reducing exposure of emails, phones, SSNs, common API key formats, and likely payment card numbers inside operational telemetry.
+The system stores full chat content in `messages`, but only redacted previews in inference logs. The SDK redaction pipeline combines structured field redaction, sensitive-document suppression for higher-risk payloads such as health records, and baseline pattern matching for secrets and common identifiers.
 
 ## Deliberate Tradeoffs
 
 - PostgreSQL is the default store because it is portable, familiar, and realistic for deployment and analytics.
 - Schema bootstrap runs on first database access to reduce local setup friction and keep the repo easy to evaluate.
+- The SDK is designed wrapper-first because explicit instrumentation is more predictable and stable across providers and client versions.
+- Monkey-patching is supported as an optional convenience layer because it lowers adoption friction for existing HTTP-based integrations, but it is intentionally not the primary integration mode.
 - Streaming is implemented over NDJSON because it is simple to reason about in route handlers and easy to parse incrementally in the browser.
+- SDK event emission is asynchronous so inference execution is not blocked on logging persistence.
 - Ingestion uses an outbox-style event table inside the same database instead of a separate broker. That keeps the architecture small while still making the event boundary explicit and replayable.
 - Cancellation is handled through an in-memory generation registry. This keeps the control path straightforward, but it intentionally constrains the write path to a single active app replica until cancellation state is externalized.
 - The compatibility route at `/messages` remains available for buffered execution, while the primary UI path uses `/stream`.
@@ -112,7 +144,7 @@ The system stores full chat content in `messages`, but only redacted previews in
 - Docker Compose local environment
 - Event-first ingestion with replayable pending events
 - PII-aware log preview redaction
-- Self-hosted Kubernetes manifests under [k8s/README.md](/Users/aamaan/Documents/New%20project%203/k8s/README.md)
+- Self-hosted Kubernetes manifests under [k8s/README.md](./k8s/README.md)
 
 ## Verification
 

@@ -31,8 +31,11 @@ const schemaSql = `
     event_id TEXT NOT NULL UNIQUE,
     provider TEXT NOT NULL,
     model TEXT NOT NULL,
+    operation TEXT,
+    source_type TEXT,
+    session_id TEXT,
     status TEXT NOT NULL,
-    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE,
     request_message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
     response_message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
     request_preview TEXT,
@@ -55,6 +58,8 @@ const schemaSql = `
     ON inference_logs (provider, model);
   CREATE INDEX IF NOT EXISTS idx_inference_logs_status
     ON inference_logs (status);
+  CREATE INDEX IF NOT EXISTS idx_inference_logs_session_created
+    ON inference_logs (session_id, created_at);
 
   CREATE TABLE IF NOT EXISTS inference_events (
     id TEXT PRIMARY KEY,
@@ -69,6 +74,15 @@ const schemaSql = `
 
   CREATE INDEX IF NOT EXISTS idx_inference_events_status_created
     ON inference_events (status, created_at);
+
+  ALTER TABLE inference_logs
+    ADD COLUMN IF NOT EXISTS operation TEXT;
+  ALTER TABLE inference_logs
+    ADD COLUMN IF NOT EXISTS source_type TEXT;
+  ALTER TABLE inference_logs
+    ADD COLUMN IF NOT EXISTS session_id TEXT;
+  ALTER TABLE inference_logs
+    ALTER COLUMN conversation_id DROP NOT NULL;
 `;
 
 const globalForDb = globalThis as typeof globalThis & {

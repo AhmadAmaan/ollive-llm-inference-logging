@@ -11,7 +11,10 @@ export const sendMessageSchema = z.object({
 
 export const inferenceEventSchema = z.object({
   eventId: z.string().min(1),
-  conversationId: z.string().min(1),
+  operation: z.string().min(1).max(120),
+  sourceType: z.enum(["sdk", "chat", "fetch", "http"]).optional(),
+  sessionId: z.string().min(1).nullable().optional(),
+  conversationId: z.string().min(1).nullable().optional(),
   requestMessageId: z.string().min(1).nullable().optional(),
   responseMessageId: z.string().min(1).nullable().optional(),
   provider: z.string().min(1),

@@ -1,8 +1,6 @@
-import { randomUUID } from "node:crypto";
-
 import type { ProviderOption } from "@/lib/types";
+import { createHttpEventTransport, createInferenceSdk } from "@/lib/sdk";
 import { truncate } from "@/lib/utils";
-import { redactSensitiveText } from "@/lib/server/redaction";
 
 type ChatMessage = {
   role: "system" | "user" | "assistant";
@@ -49,6 +47,12 @@ type SseEvent = {
   event?: string;
   data: string;
 };
+
+function createServerSdk(baseUrl: string) {
+  return createInferenceSdk({
+    transport: createHttpEventTransport(`${baseUrl}/api/ingest/inference`),
+  });
+}
 
 export class InferenceExecutionError extends Error {
   kind: "cancelled" | "error";
@@ -521,28 +525,6 @@ async function* streamAnthropic(
   };
 }
 
-async function emitInferenceEvent(baseUrl: string, payload: Record<string, unknown>) {
-  try {
-    const response = await fetch(`${baseUrl}/api/ingest/inference`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const data = (await response.json()) as { inferenceLogId?: string };
-    return data.inferenceLogId ?? null;
-  } catch {
-    return null;
-  }
-}
-
 function getResolvedProviderSnapshot(requestedProvider: ProviderOption = "auto") {
   try {
     return getProviderConfig(requestedProvider);
@@ -592,10 +574,10 @@ export async function* streamInstrumentedInference({
   requestedProvider = "auto",
 }: RunInferenceParams): AsyncGenerator<StreamEvent, void, void> {
   const startedAt = new Date();
-  const eventId = randomUUID();
   const stream = providerStream(requestedProvider, messages, signal);
   const iterator = stream[Symbol.asyncIterator]();
   let accumulated = "";
+  const sdk = createServerSdk(baseUrl);
 
   try {
     while (true) {
@@ -603,25 +585,30 @@ export async function* streamInstrumentedInference({
       if (next.done) {
         const completedAt = new Date();
         const finalMeta = next.value;
-        const inferenceLogId = await emitInferenceEvent(baseUrl, {
-          eventId,
-          conversationId,
-          requestMessageId,
-          responseMessageId,
-          provider: finalMeta.provider,
-          model: finalMeta.model,
-          status: "success",
-          startedAt: startedAt.toISOString(),
-          completedAt: completedAt.toISOString(),
-          latencyMs: completedAt.getTime() - startedAt.getTime(),
+        sdk.recordSuccess({
+          context: {
+            provider: finalMeta.provider,
+            model: finalMeta.model,
+            operation: "chat.stream",
+            sourceType: "chat",
+            sessionId: conversationId,
+            conversationId,
+            requestMessageId,
+            responseMessageId,
+            metadata: {
+              requestedProvider,
+              streaming: true,
+            },
+          },
+          input: {
+            messages,
+          },
+          output: {
+            text: accumulated,
+          },
+          startedAt,
+          completedAt,
           usage: finalMeta.usage,
-          requestPreview: truncate(
-            redactSensitiveText(
-              messages.map((message) => `${message.role}: ${message.content}`).join("\n"),
-            ) || "",
-            320,
-          ),
-          responsePreview: truncate(redactSensitiveText(accumulated) || "", 320),
           metadata: finalMeta.metadata,
         });
 
@@ -629,7 +616,7 @@ export async function* streamInstrumentedInference({
           type: "completed",
           text: accumulated,
           source: finalMeta.provider,
-          inferenceLogId,
+          inferenceLogId: null,
         };
         return;
       }
@@ -647,32 +634,32 @@ export async function* streamInstrumentedInference({
     const message =
       error instanceof Error ? error.message : "Unexpected provider execution error.";
     const resolved = getResolvedProviderSnapshot(requestedProvider);
-    const inferenceLogId = await emitInferenceEvent(baseUrl, {
-      eventId,
-      conversationId,
-      requestMessageId,
-      responseMessageId,
-      provider: resolved.provider,
-      model: resolved.model,
-      status: kind,
-      startedAt: startedAt.toISOString(),
-      completedAt: completedAt.toISOString(),
-      latencyMs: completedAt.getTime() - startedAt.getTime(),
-      usage: undefined,
-      requestPreview: truncate(
-        redactSensitiveText(
-          messages.map((item) => `${item.role}: ${item.content}`).join("\n"),
-        ) || "",
-        320,
-      ),
-      responsePreview: truncate(redactSensitiveText(accumulated) || "", 320),
-      error: {
-        code: isAbortError(error) ? "REQUEST_ABORTED" : "PROVIDER_ERROR",
-        message,
-      },
-      metadata: {
+    sdk.recordFailure({
+      context: {
         provider: resolved.provider,
         model: resolved.model,
+        operation: "chat.stream",
+        sourceType: "chat",
+        sessionId: conversationId,
+        conversationId,
+        requestMessageId,
+        responseMessageId,
+        metadata: {
+          streaming: true,
+        },
+      },
+      input: {
+        messages,
+      },
+      output: accumulated ? { text: accumulated } : undefined,
+      error: {
+        name: isAbortError(error) ? "REQUEST_ABORTED" : "PROVIDER_ERROR",
+        message,
+      },
+      startedAt,
+      completedAt,
+      status: kind,
+      metadata: {
         requestedProvider,
       },
     });
@@ -680,7 +667,7 @@ export async function* streamInstrumentedInference({
     throw new InferenceExecutionError(message, {
       kind,
       code: isAbortError(error) ? "REQUEST_ABORTED" : "PROVIDER_ERROR",
-      inferenceLogId,
+      inferenceLogId: null,
     });
   }
 }

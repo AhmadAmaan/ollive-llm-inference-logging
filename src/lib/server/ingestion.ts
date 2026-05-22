@@ -22,6 +22,9 @@ async function upsertInferenceLog(event: InferenceEventInput) {
         event_id,
         provider,
         model,
+        operation,
+        source_type,
+        session_id,
         status,
         conversation_id,
         request_message_id,
@@ -40,7 +43,8 @@ async function upsertInferenceLog(event: InferenceEventInput) {
         created_at
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-        $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb, $20
+        $11, $12, $13, $14, $15, $16, $17, $18, $19,
+        $20, $21, $22::jsonb, $23
       )
       ON CONFLICT (event_id) DO NOTHING
       RETURNING id
@@ -50,8 +54,11 @@ async function upsertInferenceLog(event: InferenceEventInput) {
       event.eventId,
       event.provider,
       event.model,
+      event.operation,
+      event.sourceType ?? null,
+      event.sessionId ?? null,
       mapStatus(event.status),
-      event.conversationId,
+      event.conversationId ?? null,
       event.requestMessageId ?? null,
       event.responseMessageId ?? null,
       event.requestPreview ?? null,
