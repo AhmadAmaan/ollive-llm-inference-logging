@@ -12,6 +12,7 @@ Production-minded inference logging and ingestion system for an LLM application.
 - Provider routing with `OpenAI`, `Anthropic`, `Mock`, or `Auto`
 - Normalized inference logging with latency, token usage, status, and provider metadata
 - Event-first ingestion with an outbox-style `inference_events` table plus normalized `inference_logs`
+- End-to-end asynchronous ingestion using enqueue-only receipt plus background event processing
 - Policy-based redaction that combines structured field redaction, sensitive-document suppression, and pattern matching
 - Operational dashboard for throughput, status mix, latency buckets, and provider/model mix
 - Local startup via Docker Compose and self-hosted deployment manifests for Kubernetes
@@ -110,8 +111,9 @@ const result = await sdk.wrap({
 2. The SDK captures timing, provider metadata, identifiers, previews, and error state independently of any UI.
 3. The demo chat application uses that same SDK while streaming provider output back to the browser.
 4. The SDK emits a normalized inference event asynchronously.
-5. The ingestion path persists the raw event to `inference_events` and processes it into `inference_logs`.
-6. The application flow completes without blocking on telemetry persistence.
+5. The ingestion endpoint validates and enqueues the raw event into `inference_events` and returns immediately.
+6. A background worker claims pending events and materializes them into `inference_logs`.
+7. The application flow completes without blocking on telemetry persistence.
 
 ### Storage model
 
@@ -132,7 +134,7 @@ The system stores full chat content in `messages`, but only redacted previews in
 - Monkey-patching is supported as an optional convenience layer because it lowers adoption friction for existing HTTP-based integrations, but it is intentionally not the primary integration mode.
 - Streaming is implemented over NDJSON because it is simple to reason about in route handlers and easy to parse incrementally in the browser.
 - SDK event emission is asynchronous so inference execution is not blocked on logging persistence.
-- Ingestion uses an outbox-style event table inside the same database instead of a separate broker. That keeps the architecture small while still making the event boundary explicit and replayable.
+- Ingestion uses an outbox-style event table plus an in-process background worker instead of introducing an external queue immediately. That keeps the architecture small while still making the pipeline asynchronous end to end.
 - Cancellation is handled through an in-memory generation registry. This keeps the control path straightforward, but it intentionally constrains the write path to a single active app replica until cancellation state is externalized.
 - The compatibility route at `/messages` remains available for buffered execution, while the primary UI path uses `/stream`.
 
@@ -143,6 +145,7 @@ The system stores full chat content in `messages`, but only redacted previews in
 - Telemetry dashboard
 - Docker Compose local environment
 - Event-first ingestion with replayable pending events
+- Fully asynchronous ingestion from SDK emission through background materialization
 - PII-aware log preview redaction
 - Self-hosted Kubernetes manifests under [k8s/README.md](./k8s/README.md)
 
@@ -165,9 +168,9 @@ Both commands pass in this repo.
 
 - Add integration tests that cover streaming, cancellation, ingestion retries, and multi-provider routing end to end.
 - Move cancellation state and event processing onto shared infrastructure so the app can scale beyond a single active replica.
+- Replace the in-process background worker with a dedicated queue and worker deployment for stronger durability and cross-instance coordination.
 - Add authentication, tenant boundaries, and stronger policy-driven redaction for production environments.
 - Extend dashboarding with percentile latency, provider cost tracking, and alert-oriented operational views.
-- Split event processing into a dedicated worker deployment once traffic justifies a stronger async boundary.
 
 ## Additional Notes
 

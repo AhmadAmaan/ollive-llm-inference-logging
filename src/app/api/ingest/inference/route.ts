@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 
-import { persistInferenceEvent } from "@/lib/server/ingestion";
+import {
+  enqueueInferenceEvent,
+  scheduleInferenceEventProcessing,
+} from "@/lib/server/ingestion";
 import { inferenceEventSchema } from "@/lib/validators";
 
 export const runtime = "nodejs";
@@ -20,12 +23,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const inferenceLog = await persistInferenceEvent(parsed.data);
+  const enqueueResult = await enqueueInferenceEvent(parsed.data);
+  scheduleInferenceEventProcessing();
+
   return NextResponse.json(
     {
       ok: true,
-      inferenceLogId: inferenceLog.id,
+      eventId: enqueueResult.eventId,
+      enqueued: enqueueResult.enqueued,
     },
-    { status: 201 },
+    { status: 202 },
   );
 }

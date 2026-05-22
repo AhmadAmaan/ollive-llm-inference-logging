@@ -67,8 +67,10 @@ const schemaSql = `
     event_type TEXT NOT NULL,
     payload JSONB NOT NULL,
     status TEXT NOT NULL DEFAULT 'PENDING',
+    attempt_count INTEGER NOT NULL DEFAULT 0,
     error_message TEXT,
     created_at TIMESTAMPTZ NOT NULL,
+    processing_started_at TIMESTAMPTZ,
     processed_at TIMESTAMPTZ
   );
 
@@ -83,6 +85,10 @@ const schemaSql = `
     ADD COLUMN IF NOT EXISTS session_id TEXT;
   ALTER TABLE inference_logs
     ALTER COLUMN conversation_id DROP NOT NULL;
+  ALTER TABLE inference_events
+    ADD COLUMN IF NOT EXISTS attempt_count INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE inference_events
+    ADD COLUMN IF NOT EXISTS processing_started_at TIMESTAMPTZ;
 `;
 
 const globalForDb = globalThis as typeof globalThis & {

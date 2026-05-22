@@ -1,7 +1,21 @@
 import { randomUUID } from "node:crypto";
 
-import { query, queryOne } from "@/lib/db";
+import { query, queryOne, withTransaction } from "@/lib/db";
 import type { InferenceEventInput } from "@/lib/validators";
+
+const PROCESSING_STALE_AFTER_MS = 5 * 60 * 1000;
+const DEFAULT_BATCH_SIZE = 25;
+
+const globalIngestionState = globalThis as typeof globalThis & {
+  __olliveIngestionWorkerScheduled?: boolean;
+  __olliveIngestionWorkerRunning?: boolean;
+};
+
+type ClaimedEventRow = {
+  id: string;
+  payload: InferenceEventInput;
+  attempt_count: number;
+};
 
 function mapStatus(status: InferenceEventInput["status"]) {
   switch (status) {
@@ -88,10 +102,10 @@ async function upsertInferenceLog(event: InferenceEventInput) {
   return existing?.id ?? null;
 }
 
-async function enqueueInferenceEvent(event: InferenceEventInput) {
+export async function enqueueInferenceEvent(event: InferenceEventInput) {
   const eventRowId = randomUUID();
 
-  const inserted = await queryOne<{ id: string }>(
+  const inserted = await queryOne<{ id: string; event_id: string }>(
     `
       INSERT INTO inference_events (
         id,
@@ -99,130 +113,166 @@ async function enqueueInferenceEvent(event: InferenceEventInput) {
         event_type,
         payload,
         status,
+        attempt_count,
         error_message,
         created_at,
+        processing_started_at,
         processed_at
-      ) VALUES ($1, $2, 'INFERENCE_LOGGED', $3::jsonb, 'PENDING', NULL, $4, NULL)
+      ) VALUES ($1, $2, 'INFERENCE_LOGGED', $3::jsonb, 'PENDING', 0, NULL, $4, NULL, NULL)
       ON CONFLICT (event_id) DO NOTHING
-      RETURNING id
+      RETURNING id, event_id
     `,
     [eventRowId, event.eventId, JSON.stringify(event), new Date().toISOString()],
   );
 
   if (inserted?.id) {
-    return inserted.id;
+    return {
+      id: inserted.id,
+      eventId: inserted.event_id,
+      enqueued: true,
+    };
   }
 
-  const existing = await queryOne<{ id: string }>(
-    `SELECT id FROM inference_events WHERE event_id = $1`,
+  const existing = await queryOne<{ id: string; event_id: string }>(
+    `SELECT id, event_id FROM inference_events WHERE event_id = $1`,
     [event.eventId],
   );
 
-  return existing?.id ?? null;
+  return {
+    id: existing?.id ?? null,
+    eventId: existing?.event_id ?? event.eventId,
+    enqueued: false,
+  };
 }
 
-async function processInferenceEventById(eventRowId: string) {
-  const eventRow = await queryOne<{
-    id: string;
-    payload: InferenceEventInput;
-    status: string;
-  }>(
-    `
-      SELECT id, payload, status
-      FROM inference_events
-      WHERE id = $1
-    `,
-    [eventRowId],
-  );
-
-  if (!eventRow) {
-    return { inferenceLogId: null, processed: false };
-  }
-
-  if (eventRow.status === "PROCESSED") {
-    const existing = await queryOne<{ id: string }>(
-      `SELECT id FROM inference_logs WHERE event_id = $1`,
-      [eventRow.payload.eventId],
-    );
-
-    return {
-      inferenceLogId: existing?.id ?? null,
-      processed: false,
-    };
-  }
-
-  try {
-    const inferenceLogId = await upsertInferenceLog(eventRow.payload);
-
-    await query(
+async function claimPendingInferenceEvents(limit = DEFAULT_BATCH_SIZE) {
+  const staleBefore = new Date(Date.now() - PROCESSING_STALE_AFTER_MS).toISOString();
+  const claimed = await withTransaction(async (client) => {
+    const result = await client.query<ClaimedEventRow>(
       `
-        UPDATE inference_events
+        WITH next_events AS (
+          SELECT id
+          FROM inference_events
+          WHERE status = 'PENDING'
+             OR (status = 'PROCESSING' AND processing_started_at < $2)
+          ORDER BY created_at ASC
+          LIMIT $1
+          FOR UPDATE SKIP LOCKED
+        )
+        UPDATE inference_events AS events
         SET
-          status = 'PROCESSED',
-          processed_at = $1,
+          status = 'PROCESSING',
+          processing_started_at = $3,
+          attempt_count = COALESCE(attempt_count, 0) + 1,
           error_message = NULL
-        WHERE id = $2
+        FROM next_events
+        WHERE events.id = next_events.id
+        RETURNING events.id, events.payload, events.attempt_count
       `,
-      [new Date().toISOString(), eventRowId],
+      [limit, staleBefore, new Date().toISOString()],
     );
 
-    return {
-      inferenceLogId,
-      processed: true,
-    };
+    return result.rows;
+  });
+
+  return claimed;
+}
+
+async function markInferenceEventProcessed(eventRowId: string) {
+  await query(
+    `
+      UPDATE inference_events
+      SET
+        status = 'PROCESSED',
+        processed_at = $1,
+        processing_started_at = NULL,
+        error_message = NULL
+      WHERE id = $2
+    `,
+    [new Date().toISOString(), eventRowId],
+  );
+}
+
+async function markInferenceEventFailed(eventRowId: string, message: string) {
+  await query(
+    `
+      UPDATE inference_events
+      SET
+        status = 'FAILED',
+        error_message = $1,
+        processing_started_at = NULL
+      WHERE id = $2
+    `,
+    [message, eventRowId],
+  );
+}
+
+async function processClaimedInferenceEvent(eventRow: ClaimedEventRow) {
+  try {
+    await upsertInferenceLog(eventRow.payload);
+    await markInferenceEventProcessed(eventRow.id);
+    return { processed: true };
   } catch (error) {
-    await query(
-      `
-        UPDATE inference_events
-        SET
-          status = 'FAILED',
-          error_message = $1
-        WHERE id = $2
-      `,
-      [error instanceof Error ? error.message : "Unknown event processing failure.", eventRowId],
+    await markInferenceEventFailed(
+      eventRow.id,
+      error instanceof Error ? error.message : "Unknown event processing failure.",
     );
-    throw error;
+    return { processed: false };
   }
 }
 
-export async function processPendingInferenceEvents(limit = 50) {
-  const pending = await query<{ id: string }>(
-    `
-      SELECT id
-      FROM inference_events
-      WHERE status = 'PENDING'
-      ORDER BY created_at ASC
-      LIMIT $1
-    `,
-    [limit],
-  );
-
+export async function processPendingInferenceEvents(limit = DEFAULT_BATCH_SIZE) {
+  const claimed = await claimPendingInferenceEvents(limit);
   let processed = 0;
+  let failed = 0;
 
-  for (const eventRow of pending.rows) {
-    const result = await processInferenceEventById(eventRow.id);
+  for (const eventRow of claimed) {
+    const result = await processClaimedInferenceEvent(eventRow);
     if (result.processed) {
       processed += 1;
+    } else {
+      failed += 1;
     }
   }
 
   return {
+    claimed: claimed.length,
     processed,
-    pending: pending.rows.length,
+    failed,
   };
 }
 
-export async function persistInferenceEvent(event: InferenceEventInput) {
-  const eventRowId = await enqueueInferenceEvent(event);
-  if (!eventRowId) {
-    const existing = await queryOne<{ id: string }>(
-      `SELECT id FROM inference_logs WHERE event_id = $1`,
-      [event.eventId],
-    );
-
-    return { id: existing?.id ?? null };
+async function drainInferenceEventQueue() {
+  if (globalIngestionState.__olliveIngestionWorkerRunning) {
+    return;
   }
 
-  const result = await processInferenceEventById(eventRowId);
-  return { id: result.inferenceLogId };
+  globalIngestionState.__olliveIngestionWorkerRunning = true;
+
+  try {
+    while (true) {
+      const batch = await processPendingInferenceEvents();
+      if (batch.claimed === 0) {
+        break;
+      }
+    }
+  } finally {
+    globalIngestionState.__olliveIngestionWorkerRunning = false;
+  }
+}
+
+export function scheduleInferenceEventProcessing() {
+  if (globalIngestionState.__olliveIngestionWorkerScheduled) {
+    return;
+  }
+
+  globalIngestionState.__olliveIngestionWorkerScheduled = true;
+
+  setTimeout(() => {
+    globalIngestionState.__olliveIngestionWorkerScheduled = false;
+
+    void drainInferenceEventQueue().catch((error) => {
+      console.error("Background inference event worker failed.", error);
+    });
+  }, 0);
 }
