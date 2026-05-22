@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ollive-inference-console
+description: Helm chart for the Ollive inference console application and optional in-cluster Postgres.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

@@ -1,0 +1,16 @@
+1. Install the chart:
+   helm upgrade --install {{ .Release.Name }} ./helm/ollive-inference-console --namespace {{ .Release.Namespace }} --create-namespace
+
+2. Access the app:
+{{- if .Values.ingress.enabled }}
+   Configure DNS for the ingress host or use a hosts file entry for:
+{{- range .Values.ingress.hosts }}
+   - {{ .host }}
+{{- end }}
+{{- else }}
+   kubectl port-forward svc/{{ include "ollive-inference-console.fullname" . }} 3000:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+{{- end }}
+
+3. Update image values before production use:
+   image.repository={{ .Values.image.repository }}
+   image.tag={{ .Values.image.tag }}

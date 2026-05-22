@@ -1,0 +1,66 @@
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: ollive-assignment
+  tag: latest
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+runtime:
+  defaultProvider: auto
+  llmModel: gpt-4.1-mini
+  anthropicModel: claude-3-5-sonnet-latest
+
+secrets:
+  databaseUrl: postgresql://postgres:postgres@{{POSTGRES_HOST}}:5432/ollive_inference
+  openaiApiKey: ""
+  anthropicApiKey: ""
+  postgresPassword: postgres
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+  hosts:
+    - host: ollive.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+postgres:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+  service:
+    port: 5432
+  auth:
+    database: ollive_inference
+    username: postgres
+  persistence:
+    size: 10Gi
+    accessModes:
+      - ReadWriteOnce
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
